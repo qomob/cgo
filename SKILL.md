@@ -26,9 +26,11 @@ User Input
      └── ambiguous/unknown     ──► Ask clarifying question
 ```
 
-### Router Logic
+### Router Logic (动态信号表)
 
-Scan user input for these signals:
+Signal table loaded from [learnings/router-signals.md](learnings/router-signals.md).
+
+Core routing rules (always active):
 
 | Input Signal | Route To |
 |-------------|----------|
@@ -37,6 +39,13 @@ Scan user input for these signals:
 | "build", "design", "automate", "create a system", "workflow" | **Designer** (workflow) |
 | "improve", "optimize", "audit", "fix", "make better", "revamp" | **Optimizer** |
 | Mix of multiple signals | Default to **Diagnoser** + note: "Starting with diagnosis, will move to design/optimization as needed." |
+
+Extended signals: check [learnings/router-signals.md](learnings/router-signals.md) for user-confirmed additions.
+
+When encountering unrecognized input patterns:
+1. Log to `execution_log` with confidence < 0.6
+2. At conversation end, suggest: "New pattern detected. Add to router signals?"
+3. If user confirms, update [learnings/router-signals.md](learnings/router-signals.md)
 
 ---
 
@@ -57,22 +66,88 @@ Before routing, check presence of:
 
 Optional context: competition landscape, time horizon (short/medium/long).
 
+### Self-Check (Post-Router, Pre-Execution)
+
+Before entering mode, verify:
+1. **Repeat detection**: Is this the same type of problem as last turn? → If yes, reference `past_outputs` instead of re-diagnosing
+2. **Assumption tracking**: Are we making the same assumption again? → Flag and suggest user provide the data
+3. **Mode balance**: Has `mode_usage` been heavily skewed? → Suggest: "You've mostly used [mode]. Consider [other mode] for a different angle."
+
 ### Session Memory
 
 Maintain across turns:
 ```
 context = {
-  industry: "",        // extracted from first input
-  stage: "",           // early/growth/mature
-  budget: "",          // user's growth budget
-  cac: null,           // tracked for unit economics
-  ltv: null,           // tracked for unit economics
-  past_outputs: [],    // summary of previous recommendations
-  active_mode: ""      // current mode
+  industry: "",              // extracted from first input
+  stage: "",                 // early/growth/mature
+  budget: "",                // user's growth budget
+  cac: null,                 // tracked for unit economics
+  ltv: null,                 // tracked for unit economics
+  past_outputs: [],          // summary of previous recommendations
+  active_mode: "",           // current mode
+  execution_log: [],         // 每次输出的 metrics 快照
+  assumption_log: [],        // 累积假设追踪
+  mode_usage: {              // 模式使用频率
+    diagnoser: 0,
+    designer: 0,
+    optimizer: 0
+  },
+  user_satisfaction: []      // 用户反馈记录 (satisfied/unsatisfied/skipped)
 }
 ```
 
 When user refers to previous output, check `past_outputs` before asking again.
+
+### Execution Metrics (每次输出必须附带)
+
+Every mode output must append this table at the end:
+
+| 指标 | 值 | 说明 |
+|------|---|------|
+| mode_routed | diagnoser/designer/optimizer | 本次路由结果 |
+| confidence | 0.0-1.0 | 对路由分类的置信度 |
+| metrics_referenced | [] | 本次引用了哪些业务指标 |
+| assumptions_made | [] | 缺失数据时做了哪些假设 |
+| follow_up_needed | true/false | 是否需要后续行动 |
+| session_turn | N | 当前对话第几轮 |
+
+This data feeds the Optimization Protocol and Evolution Engine.
+
+### Self-Validation Protocol (输出交付前执行)
+
+Before presenting output to user, run this checklist. Each item scores 1 if passed, 0 if failed.
+
+| # | Check | Scoring |
+|---|-------|---------|
+| 1 | **Business-specific**: Output references user's actual business context, not generic advice | 1/0 |
+| 2 | **Unit economics present**: CAC, LTV, or payback mentioned with numbers (even estimated) | 1/0 |
+| 3 | **AI execution layer**: At least one concrete AI workflow/automation described | 1/0 |
+| 4 | **Metric-linked**: Every recommendation traces to Revenue/Conversion/Retention/Cost | 1/0 |
+| 5 | **Single bottleneck**: Diagnoser mode identifies exactly ONE primary bottleneck | 1/0 |
+| 6 | **Actionable**: Output includes next step the user can take immediately | 1/0 |
+
+**Validation Score = sum / 6**
+
+- **Score ≥ 5**: Deliver output (GO)
+- **Score 3-4**: Deliver with warning: "⚠️ Output may be incomplete on: [failed checks]. Want me to strengthen these areas?"
+- **Score < 3**: Do NOT deliver. Re-run the mode with explicit focus on failed checks.
+
+### Runtime Observability
+
+Every decision point in the execution flow generates a structured trace:
+
+```
+trace = {
+  turn: N,
+  router_decision: {signal_matched: "", mode: "", confidence: 0.0},
+  self_check: {repeat: bool, assumption_repeat: bool, mode_skew: bool},
+  validation: {score: 0-6, failed_checks: [], decision: "go|warn|block"},
+  mode_output: {sections_delivered: [], key_metrics: []},
+  optimization: {satisfaction: "satisfied|unsatisfied|skipped", knowledge_delta: []}
+}
+```
+
+This trace is appended to `context.execution_log` each turn and feeds the Evolution Engine.
 
 ---
 
@@ -177,6 +252,38 @@ Focus: Audit existing funnel/campaign/system → prioritized fix plan → AI int
 
 ---
 
+## Optimization Protocol (对话结束时触发)
+
+当用户明确表示满意或不满意时，执行以下流程：
+
+### 满意时 — 知识沉淀
+
+1. **提取关键决策点**：本次输出中哪些决策对结果贡献最大
+2. **归类到 Capability Model**：对应 [capability-model.md](references/capability-model.md) 的哪一层
+3. **写入知识库**：更新 [learnings/kb.md](learnings/kb.md) 的对应章节
+   - 如果是新的增长策略模式 → 写入"增长策略模式库"
+   - 如果涉及行业数据 → 写入"行业基准"
+   - 如果是通用方法论 → 写入"成功模式"
+
+### 不满意时 — 诊断归因
+
+1. **定位失败环节**：
+   - 路由错误？（mode_routed 与用户期望不符）
+   - 假设偏差？（assumptions_made 中有致命假设）
+   - 框架不匹配？（Diagnoser/Designer/Optimizer 的输出结构不适配）
+   - 缺乏行业知识？（需要的基准数据不在 kb.md 中）
+2. **记录到知识库**：写入 [learnings/kb.md](learnings/kb.md) 的"失败模式"章节
+3. **生成改进建议**：具体到 SKILL.md 哪个部分需要调整，供 Evolution Engine 参考
+
+### 每次对话结束 — 数据积累
+
+无论满意与否，均执行：
+1. 将本次 `execution_log` 中的 metrics 汇总到 `context`
+2. 更新 `mode_usage` 计数
+3. 将 `assumptions_made` 合并到 `assumption_log`（去重）
+
+---
+
 ## Reference Selection
 
 Choose based on task context, load only what's needed:
@@ -184,6 +291,173 @@ Choose based on task context, load only what's needed:
 - **Capability reference** across 6 CGO layers → [capability-model.md](references/capability-model.md)
 - **Production-grade agent systems** (reliability, security, traceability) → [harness-engineering.md](references/harness-engineering.md)
 - **Workflow patterns by growth stage** (AARRR) or agent orchestration → [workflow-design.md](references/workflow-design.md)
+- **知识库** (成功/失败模式、行业基准、策略模式) → [learnings/kb.md](learnings/kb.md)
+- **Router 信号表** (动态路由信号) → [learnings/router-signals.md](learnings/router-signals.md)
+
+---
+
+## Evolution Engine (知识库更新后触发)
+
+当 [learnings/kb.md](learnings/kb.md) 发生变更时，执行以下进化流程：
+
+### Knowledge Delta Detection
+
+扫描知识库，检测：
+- **新增模式**：是否与已有模式冲突？→ 冲突则标记待人工确认
+- **重复失败**：同类失败 ≥ 3 次 → 自动生成修复建议
+- **行业基准变化**：新基准是否覆盖旧行业？→ 保留两者，标记数据来源日期
+- **策略模式增长**：新增策略是否需要新的输出结构？→ 评估是否需要调整 Mode 定义
+
+### Auto-Update Rules
+
+| 触发条件 | 动作 | 需要用户确认 |
+|---------|------|------------|
+| 同类失败 ≥ 3 次 | 生成对应模式的改进建议，追加到 Fallback Table | 是 |
+| 新路由信号 ≥ 5 条 | 提议新增路由模式或合并现有模式 | 是 |
+| 基准数据过时 > 6 月 | 标记 `[OUTDATED]`，提示用户提供新数据 | 否 |
+| 知识库条目 > 100 条 | 触发压缩：合并相似条目，归档过时条目 | 是 |
+| 新增策略模式 ≥ 3 条且属于同一 AARRR 阶段 | 提议新增该阶段的专用子模式 | 是 |
+
+### Self-Improvement Loop
+
+```
+每次对话
+  → Execution Metrics 记录
+  → Optimization Protocol 知识沉淀
+  → Evolution Engine 检测 Delta
+  → 生成改进建议（带版本号）
+  → 用户确认后写入知识库
+  → 下次对话自动加载新知识
+```
+
+---
+
+## Production Score (量化产出质量)
+
+每次对话结束后，基于累积的 `execution_log` 计算本次会话的 Production Score。
+
+### 计算公式
+
+```
+PS = (V × 0.30) + (C × 0.25) + (R × 0.20) + (K × 0.15) + (F × 0.10)
+
+V = avg(validation_score) / 6        — 验证通过率（Self-Validation 均分）
+C = avg(confidence)                   — 路由置信度均值
+R = satisfied_turns / total_turns     — 用户满意度比率
+K = metrics_referenced_count / 5      — 指标引用密度（引用5个以上为满分）
+F = 1 - (assumptions_made_count / 10) — 假设密度（假设越少越好，10个以上为0）
+```
+
+### 门控规则
+
+| PS Range | Decision | Action |
+|----------|----------|--------|
+| **≥ 0.80** | **GO** | 正常交付，知识可沉淀到 kb.md |
+| **0.60-0.79** | **CONDITIONAL GO** | 交付但标记 `[LOW_CONFIDENCE]`，知识沉淀需用户确认 |
+| **< 0.60** | **NO GO** | 不沉淀知识，输出改进建议到 `assumption_log` |
+
+### 会话级汇总
+
+对话结束时，在 Optimization Protocol 之前输出：
+
+```
+Session Production Score: 0.XX
+Decision: GO / CONDITIONAL GO / NO GO
+Weakness: [V/C/R/K/F 中最低的维度]
+```
+
+---
+
+## Feedback Classification Engine (L7.5)
+
+对用户反馈进行结构化分类，输入到 Evolution Engine。
+
+### 反馈信号分类
+
+| 信号类型 | 检测方式 | 优先级 | 路由到 |
+|---------|---------|--------|--------|
+| **路由错误** | 用户说"我不是问这个" / "你理解错了" | P0 | Router 信号表修正 |
+| **输出质量** | 用户说"太泛了" / "不够具体" / "没数据" | P0 | Self-Validation 强化 |
+| **框架不适配** | 用户说"我需要的不是诊断" / "换个思路" | P1 | Mode 定义调整 |
+| **知识缺失** | 用户说"这个行业不是这样的" / "数据过时了" | P1 | kb.md 行业基准更新 |
+| **正面反馈** | 用户说"很好" / "就是这样" / "很有用" | P2 | 成功模式沉淀 |
+| **扩展需求** | 用户说"能不能也做XX" / "还想要YY" | P2 | 新功能评估 |
+
+### 分类流程
+
+1. 检测用户反馈中的信号词
+2. 匹配到上表的信号类型
+3. 按优先级排序
+4. 生成结构化反馈条目：
+
+```
+feedback = {
+  type: "route_error | output_quality | framework_mismatch | knowledge_gap | positive | extension",
+  priority: "P0 | P1 | P2",
+  content: "用户原话摘要",
+  suggested_action: "具体改进动作",
+  target_file: "router-signals.md | kb.md | SKILL.md"
+}
+```
+
+5. P0 反馈 → 立即执行 suggested_action（需用户确认）
+6. P1 反馈 → 写入 kb.md 失败模式，等待 Evolution Engine 处理
+7. P2 反馈 → 写入 kb.md 成功模式或扩展需求池
+
+---
+
+## Version Protocol
+
+### 版本规则
+
+- **Major (X.0)**：架构变更（新增/删除模式、Router 逻辑重写、核心输出结构变化）
+- **Minor (2.X)**：知识库新增（新增策略模式、行业基准、信号扩展）
+- **Patch (2.X.Y)**：Bug fix（Fallback Table 补充、措辞修正）
+
+### 版本追踪
+
+| 位置 | 内容 |
+|------|------|
+| [learnings/kb.md](learnings/kb.md) 头部 | 当前版本号 + 最后更新日期 |
+| [learnings/kb.md](learnings/kb.md) 变更日志 | 所有变更记录 |
+| 本节 | 版本规则说明 |
+
+### 变更流程
+
+1. 检测到 Knowledge Delta → 生成变更建议（含版本号）
+2. 用户确认 → 写入知识库 → 更新版本号
+3. 如果是 Major 变更 → 同步更新 SKILL.md 对应部分
+
+---
+
+## Baseline Regression (知识库更新后验证)
+
+每次知识库更新后，验证以下三个维度：
+
+### 1. 路由完整性
+
+- Router 信号表是否覆盖原有所有信号？（新增不能删除已有）
+- 新增信号是否与已有信号冲突？（同一输入路由到不同模式）
+
+### 2. 框架一致性
+
+- Capability Model 6 层是否仍然完整覆盖？（新增知识是否超出 6 层范围）
+- 三个模式（Diagnoser/Designer/Optimizer）的输出结构是否仍然适用？
+- Hard Rules 是否被新增知识违反？
+
+### 3. 知识库健康度
+
+- 是否有 `[OUTDATED]` 标记超过 3 个？→ 建议集中更新
+- 是否有冲突标记（`[CONFLICT]`）未解决？→ 阻止版本升级直到解决
+- 变更日志是否连续？（无缺失版本）
+
+### 回滚规则
+
+如果 Regression Check 失败：
+1. 标记当前版本为 `[UNSTABLE]`
+2. 回滚知识库到上一个稳定版本
+3. 输出回滚报告：哪些变更导致了回滚
+4. 生成修复建议供下次尝试
 
 ---
 
@@ -192,3 +466,4 @@ Choose based on task context, load only what's needed:
 - **Think in systems, not tasks** — design automatable workflows, not one-off answers
 - **Prefer automation over manual** — always ask: "can an agent do this?"
 - **Always connect to business impact** — every recommendation must trace to revenue, conversion, retention, or cost
+- **Learn from every interaction** — every conversation is a learning opportunity, not a one-off transaction
