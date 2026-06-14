@@ -1,6 +1,6 @@
 # AI CGO — AI Chief Growth Officer
 
-> **AI驱动的企业增长操作系统** — 增长决策系统 + AI工作流编排器 + 自动优化引擎 + 自进化闭环
+> **AI驱动的企业增长操作系统** — 增长决策系统 + AI工作流编排器 + 自动优化引擎
 
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
 
@@ -8,7 +8,7 @@
 
 Prompt 是静态配置。模型升级、市场变化、用户需求变化都会让 Prompt 老化。
 
-**AI CGO 是一个能够持续进化的 Skill** — 每次对话都在积累知识，每次反馈都在优化自身。
+**AI CGO 是一个结构化积累知识的 Skill** — 每次对话可沉淀经验到知识库，供后续对话参考。
 
 ## 架构
 
@@ -23,23 +23,10 @@ User Input → Router → Diagnoser (增长问题诊断)
             GO / WARN / BLOCK
                     │
                     ▼
-            Execution Metrics + Runtime Trace
+            Execution Metrics + Trace
                     │
                     ▼
-    ┌─── Loop 1: 执行 ───────────────────────┐
-    │  Router → Mode → Validation → Output    │
-    └─────────────────────────────────────────┘
-                    │
-    ┌─── Loop 2: 优化 ───────────────────────┐
-    │  Optimization Protocol → kb.md 沉淀     │
-    │  Feedback Classification → 定向改进      │
-    └─────────────────────────────────────────┘
-                    │
-    ┌─── Loop 3: 进化 ───────────────────────┐
-    │  Evolution Engine → Knowledge Delta      │
-    │  Version Protocol → Baseline Regression  │
-    │  → 下次对话自动加载新知识               │
-    └─────────────────────────────────────────┘
+            Optimization Protocol → kb.md 沉淀
 ```
 
 ## 三大模式
@@ -59,28 +46,24 @@ User Input → Router → Diagnoser (增长问题诊断)
 
 审计现有漏斗/系统 → 优先级修复计划 → AI 改造点 → 预期改善度量
 
-## 自进化机制
+## 知识沉淀机制
 
 | 机制 | 作用 |
 |------|------|
 | **Self-Validation Protocol** | 6 项质量门控，输出交付前自动验证，GO/WARN/BLOCK 三级决策 |
-| **Execution Metrics** | 每次输出强制附带 6 项量化指标（路由、置信度、指标引用、假设、后续行动、轮次） |
-| **Runtime Observability** | 全决策链路结构化追踪（Router → Self-Check → Validation → Output → Optimization） |
-| **Production Score** | 5 维量化评分（验证通过率 30% + 路由置信度 25% + 满意度 20% + 指标密度 15% + 假设密度 10%） |
+| **Execution Metrics** | 每次输出强制附带 6 项指标（路由、置信度、指标引用、假设、后续行动、轮次） |
+| **Runtime Trace** | 全决策链路结构化追踪（Router → Self-Check → Validation → Output → Optimization） |
 | **Optimization Protocol** | 满意→知识沉淀到 kb.md / 不满意→诊断归因到失败模式 |
-| **Feedback Classification Engine** | 6 类反馈信号自动分类（路由错误/输出质量/框架不适配/知识缺失/正面/扩展），P0-P2 优先级路由 |
-| **Evolution Engine** | Knowledge Delta 检测 + 5 条自动更新规则（失败≥3次/信号≥5条/基准过时/条目>100/策略≥3条） |
-| **Version Protocol** | Major.Minor.Patch 三级版本管理 |
-| **Baseline Regression** | 3 维回归验证（路由完整性 + 框架一致性 + 知识库健康度）+ 自动回滚 |
-| **learnings/ 知识库** | 成功模式、失败模式、行业基准、策略模式自动积累 |
+| **Feedback Classification** | 将用户反馈归类为 6 类信号，用于辅助改进 |
+| **learnings/ 知识库** | 成功模式、失败模式、行业基准、策略模式的共享记录 |
 
 ## 目录结构
 
 ```
 ai-cgo/
-├── SKILL.md                          # 主技能文件（Router + 3模式 + 自进化闭环）
+├── SKILL.md                          # 主技能文件（Router + 3模式 + 知识沉淀）
 ├── README.md                         # 本文件
-├── learnings/                        # 知识库（自动积累）
+├── learnings/                        # 知识库（手动维护，随使用积累）
 │   ├── kb.md                         # 成功/失败模式、行业基准、策略模式
 │   └── router-signals.md             # 动态路由信号表（可运行时扩展）
 └── references/                       # 参考文档（按需加载）
@@ -96,7 +79,7 @@ ai-cgo/
 | [capability-model.md](references/capability-model.md) | 6层CGO能力模型：增长策略→AI系统能力→执行→数据飞轮→组织→进阶 |
 | [harness-engineering.md](references/harness-engineering.md) | Harness工程框架：R.E.S.T.模型 + PPAF Agent循环 + 安全约束 |
 | [workflow-design.md](references/workflow-design.md) | AARRR各阶段工作流模式 + Agent编排模式 |
-| [learnings/kb.md](learnings/kb.md) | 知识库：成功/失败模式、行业基准、策略模式（自动积累） |
+| [learnings/kb.md](learnings/kb.md) | 知识库：成功/失败模式、行业基准、策略模式（随使用积累） |
 | [learnings/router-signals.md](learnings/router-signals.md) | 动态路由信号表（可运行时扩展） |
 
 ## 触发场景

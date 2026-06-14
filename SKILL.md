@@ -273,7 +273,7 @@ Focus: Audit existing funnel/campaign/system → prioritized fix plan → AI int
    - 框架不匹配？（Diagnoser/Designer/Optimizer 的输出结构不适配）
    - 缺乏行业知识？（需要的基准数据不在 kb.md 中）
 2. **记录到知识库**：写入 [learnings/kb.md](learnings/kb.md) 的"失败模式"章节
-3. **生成改进建议**：具体到 SKILL.md 哪个部分需要调整，供 Evolution Engine 参考
+3. **生成改进建议**：具体到 SKILL.md 哪个部分需要调整
 
 ### 每次对话结束 — 数据积累
 
@@ -296,168 +296,50 @@ Choose based on task context, load only what's needed:
 
 ---
 
-## Evolution Engine (知识库更新后触发)
+## 知识库维护建议
 
-当 [learnings/kb.md](learnings/kb.md) 发生变更时，执行以下进化流程：
+当以下情况出现时，可提示用户手动更新知识库：
 
-### Knowledge Delta Detection
+- **重复失败**：同类失败 ≥ 3 次 → 建议用户确认后写入失败模式
+- **新路由信号**：同一输入模式出现 ≥ 5 次 → 建议用户确认后加入 router-signals.md
+- **基准数据过时 > 6 月**：标记 `[OUTDATED]`，提示用户提供新数据
+- **知识库条目 > 100 条**：建议用户合并相似条目、归档过时条目
 
-扫描知识库，检测：
-- **新增模式**：是否与已有模式冲突？→ 冲突则标记待人工确认
-- **重复失败**：同类失败 ≥ 3 次 → 自动生成修复建议
-- **行业基准变化**：新基准是否覆盖旧行业？→ 保留两者，标记数据来源日期
-- **策略模式增长**：新增策略是否需要新的输出结构？→ 评估是否需要调整 Mode 定义
-
-### Auto-Update Rules
-
-| 触发条件 | 动作 | 需要用户确认 |
-|---------|------|------------|
-| 同类失败 ≥ 3 次 | 生成对应模式的改进建议，追加到 Fallback Table | 是 |
-| 新路由信号 ≥ 5 条 | 提议新增路由模式或合并现有模式 | 是 |
-| 基准数据过时 > 6 月 | 标记 `[OUTDATED]`，提示用户提供新数据 | 否 |
-| 知识库条目 > 100 条 | 触发压缩：合并相似条目，归档过时条目 | 是 |
-| 新增策略模式 ≥ 3 条且属于同一 AARRR 阶段 | 提议新增该阶段的专用子模式 | 是 |
-
-### Self-Improvement Loop
-
-```
-每次对话
-  → Execution Metrics 记录
-  → Optimization Protocol 知识沉淀
-  → Evolution Engine 检测 Delta
-  → 生成改进建议（带版本号）
-  → 用户确认后写入知识库
-  → 下次对话自动加载新知识
-```
+所有知识库变更需用户确认后执行，不自动修改。
 
 ---
 
-## Production Score (量化产出质量)
+## Feedback Classification
 
-每次对话结束后，基于累积的 `execution_log` 计算本次会话的 Production Score。
-
-### 计算公式
-
-```
-PS = (V × 0.30) + (C × 0.25) + (R × 0.20) + (K × 0.15) + (F × 0.10)
-
-V = avg(validation_score) / 6        — 验证通过率（Self-Validation 均分）
-C = avg(confidence)                   — 路由置信度均值
-R = satisfied_turns / total_turns     — 用户满意度比率
-K = metrics_referenced_count / 5      — 指标引用密度（引用5个以上为满分）
-F = 1 - (assumptions_made_count / 10) — 假设密度（假设越少越好，10个以上为0）
-```
-
-### 门控规则
-
-| PS Range | Decision | Action |
-|----------|----------|--------|
-| **≥ 0.80** | **GO** | 正常交付，知识可沉淀到 kb.md |
-| **0.60-0.79** | **CONDITIONAL GO** | 交付但标记 `[LOW_CONFIDENCE]`，知识沉淀需用户确认 |
-| **< 0.60** | **NO GO** | 不沉淀知识，输出改进建议到 `assumption_log` |
-
-### 会话级汇总
-
-对话结束时，在 Optimization Protocol 之前输出：
-
-```
-Session Production Score: 0.XX
-Decision: GO / CONDITIONAL GO / NO GO
-Weakness: [V/C/R/K/F 中最低的维度]
-```
-
----
-
-## Feedback Classification Engine (L7.5)
-
-对用户反馈进行结构化分类，输入到 Evolution Engine。
+对用户反馈进行结构化分类，辅助后续改进。
 
 ### 反馈信号分类
 
-| 信号类型 | 检测方式 | 优先级 | 路由到 |
-|---------|---------|--------|--------|
-| **路由错误** | 用户说"我不是问这个" / "你理解错了" | P0 | Router 信号表修正 |
-| **输出质量** | 用户说"太泛了" / "不够具体" / "没数据" | P0 | Self-Validation 强化 |
-| **框架不适配** | 用户说"我需要的不是诊断" / "换个思路" | P1 | Mode 定义调整 |
-| **知识缺失** | 用户说"这个行业不是这样的" / "数据过时了" | P1 | kb.md 行业基准更新 |
-| **正面反馈** | 用户说"很好" / "就是这样" / "很有用" | P2 | 成功模式沉淀 |
-| **扩展需求** | 用户说"能不能也做XX" / "还想要YY" | P2 | 新功能评估 |
+| 信号类型 | 检测方式 | 建议动作 |
+|---------|---------|--------|
+| **路由错误** | 用户说"我不是问这个" / "你理解错了" | 提示用户是否需要调整路由 |
+| **输出质量** | 用户说"太泛了" / "不够具体" / "没数据" | 补充更多上下文后重新输出 |
+| **框架不适配** | 用户说"我需要的不是诊断" / "换个思路" | 建议切换到其他 Mode |
+| **知识缺失** | 用户说"这个行业不是这样的" / "数据过时了" | 请求用户提供正确数据 |
+| **正面反馈** | 用户说"很好" / "就是这样" / "很有用" | 记录成功模式（需用户确认） |
+| **扩展需求** | 用户说"能不能也做XX" / "还想要YY" | 记录扩展需求供后续评估 |
 
 ### 分类流程
 
 1. 检测用户反馈中的信号词
 2. 匹配到上表的信号类型
-3. 按优先级排序
-4. 生成结构化反馈条目：
-
-```
-feedback = {
-  type: "route_error | output_quality | framework_mismatch | knowledge_gap | positive | extension",
-  priority: "P0 | P1 | P2",
-  content: "用户原话摘要",
-  suggested_action: "具体改进动作",
-  target_file: "router-signals.md | kb.md | SKILL.md"
-}
-```
-
-5. P0 反馈 → 立即执行 suggested_action（需用户确认）
-6. P1 反馈 → 写入 kb.md 失败模式，等待 Evolution Engine 处理
-7. P2 反馈 → 写入 kb.md 成功模式或扩展需求池
+3. 在 `execution_log` 中记录分类结果
+4. 对话结束时，在 Optimization Protocol 中汇总给用户
 
 ---
 
-## Version Protocol
+## 版本号建议
 
-### 版本规则
+建议在 `kb.md` 中使用 Major.Minor.Patch 格式追踪知识库变更：
 
-- **Major (X.0)**：架构变更（新增/删除模式、Router 逻辑重写、核心输出结构变化）
-- **Minor (2.X)**：知识库新增（新增策略模式、行业基准、信号扩展）
-- **Patch (2.X.Y)**：Bug fix（Fallback Table 补充、措辞修正）
-
-### 版本追踪
-
-| 位置 | 内容 |
-|------|------|
-| [learnings/kb.md](learnings/kb.md) 头部 | 当前版本号 + 最后更新日期 |
-| [learnings/kb.md](learnings/kb.md) 变更日志 | 所有变更记录 |
-| 本节 | 版本规则说明 |
-
-### 变更流程
-
-1. 检测到 Knowledge Delta → 生成变更建议（含版本号）
-2. 用户确认 → 写入知识库 → 更新版本号
-3. 如果是 Major 变更 → 同步更新 SKILL.md 对应部分
-
----
-
-## Baseline Regression (知识库更新后验证)
-
-每次知识库更新后，验证以下三个维度：
-
-### 1. 路由完整性
-
-- Router 信号表是否覆盖原有所有信号？（新增不能删除已有）
-- 新增信号是否与已有信号冲突？（同一输入路由到不同模式）
-
-### 2. 框架一致性
-
-- Capability Model 6 层是否仍然完整覆盖？（新增知识是否超出 6 层范围）
-- 三个模式（Diagnoser/Designer/Optimizer）的输出结构是否仍然适用？
-- Hard Rules 是否被新增知识违反？
-
-### 3. 知识库健康度
-
-- 是否有 `[OUTDATED]` 标记超过 3 个？→ 建议集中更新
-- 是否有冲突标记（`[CONFLICT]`）未解决？→ 阻止版本升级直到解决
-- 变更日志是否连续？（无缺失版本）
-
-### 回滚规则
-
-如果 Regression Check 失败：
-1. 标记当前版本为 `[UNSTABLE]`
-2. 回滚知识库到上一个稳定版本
-3. 输出回滚报告：哪些变更导致了回滚
-4. 生成修复建议供下次尝试
+- **Major**：架构变更（新增/删除模式、Router 逻辑重写）
+- **Minor**：知识库新增（策略模式、行业基准、信号扩展）
+- **Patch**：Bug fix（Fallback Table 补充、措辞修正）
 
 ---
 
